@@ -15,8 +15,8 @@ Connectionless BLE V3 (AES-128 ECB + XBOXES) smart lamp controller for Flipper Z
 
 - **Protocol**: Implements LampSmart Pro V3 connectionless BLE advertising (`0x08F0` Service Data) with `XBOXES` whitening, `CRC16-HQX`, and `AES-128 ECB` payload signing.
 - **Passive Cloning**: Uses decoded 32-bit remote IDs without triggering pairing or disrupting existing mobile app sessions.
-- **Multi-Lamp Control**: Supports up to 8 lamp profiles loaded dynamically from SD card (`/ext/apps_data/lamp_pair/remotes.txt`) plus an `ALL` (`HEPSI`) broadcast mode.
-- **Visual OLED UI**: 5-step vertical brightness bar, 5-step warm-to-cold Kelvin bar, central power indicator, preset modes (`Gece`, `Okuma`, `Sabah`, `Odak`), active lamp dots, and live battery icon.
+- **Multi-Lamp Control**: Supports up to 8 lamp profiles loaded dynamically from SD card (`/ext/apps_data/lamp_pair/remotes.txt`) plus an `ALL` broadcast mode.
+- **Visual OLED UI**: 5-step vertical brightness bar, 5-step warm-to-cold Kelvin bar, central power indicator, preset modes (`Night`, `Read`, `Morning`, `Focus`), active lamp dots, and live battery icon.
 
 ---
 
@@ -27,8 +27,8 @@ Connectionless BLE V3 (AES-128 ECB + XBOXES) smart lamp controller for Flipper Z
 | **Up / Down** *(Short)* | Adjust brightness (`0%` – `100%`, `20%` steps) & send |
 | **Left / Right** *(Short)* | Adjust Kelvin temperature (Warm ↔ Cold) & send |
 | **OK** *(Short)* | Toggle Power (`ON` / `OFF`) |
-| **OK** *(Long)* | Cycle preset mode (`Gece` → `Okuma` → `Sabah` → `Odak`) |
-| **Left / Right** *(Long)* | Switch active lamp (`Lamba 1..4` → `HEPSI`) |
+| **OK** *(Long)* | Cycle preset mode (`Night` → `Read` → `Morning` → `Focus`) |
+| **Left / Right** *(Long)* | Switch active lamp (`Lamp 1..4` → `ALL`) |
 | **Down** *(Long)* | Send `PAIR` (`0x28`) command |
 | **Back** *(Short)* | Exit |
 
