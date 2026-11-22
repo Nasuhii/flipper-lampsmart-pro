@@ -1,0 +1,9 @@
+App(
+    appid="lamp_pair",
+    name="Lamp Pair",
+    apptype=FlipperAppType.EXTERNAL,
+    entry_point="lamp_pair_app",
+    stack_size=2 * 1024,
+    fap_category="Bluetooth",
+    fap_description="LampSmart Pro V2/V3 BLE Lamp Controller (Passive ID Clone)",
+)

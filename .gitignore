@@ -1,0 +1,7 @@
+.vscode/
+dist/debug/
+*.elf
+*.o
+*.d
+__pycache__/
+.DS_Store
