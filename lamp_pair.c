@@ -270,8 +270,11 @@ static void build_lampsmart_v3_adv(
     dec[9] = (uint8_t)((rem_id >> 24) & 0xFF);
     dec[10] = 0x00;
     dec[11] = cmd;
-    dec[14] = cold;
-    dec[15] = warm;
+    dec[12] = 0x00;
+    dec[13] = 0x00;
+    dec[14] = 0x00;
+    dec[15] = cold;
+    dec[16] = warm;
 
     uint8_t key[16] = {
         (uint8_t)(seed & 0xFF),
