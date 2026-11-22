@@ -15,7 +15,7 @@ Connectionless BLE V3 (AES-128 ECB + XBOXES) smart lamp controller for Flipper Z
 
 - **Protocol**: Implements LampSmart Pro V3 connectionless BLE advertising (`0x08F0` Service Data) with `XBOXES` whitening, `CRC16-HQX`, and `AES-128 ECB` payload signing.
 - **Passive Cloning**: Uses decoded 32-bit remote IDs without triggering pairing or disrupting existing mobile app sessions.
-- **Multi-Lamp Control**: Supports 4 individual lamp profiles plus an `ALL` (`HEPSI`) sequential broadcast mode.
+- **Multi-Lamp Control**: Supports up to 8 lamp profiles loaded dynamically from SD card (`/ext/apps_data/lamp_pair/remotes.txt`) plus an `ALL` (`HEPSI`) broadcast mode.
 - **Visual OLED UI**: 5-step vertical brightness bar, 5-step warm-to-cold Kelvin bar, central power indicator, preset modes (`Gece`, `Okuma`, `Sabah`, `Odak`), active lamp dots, and live battery icon.
 
 ---
@@ -53,6 +53,8 @@ ufbt launch
 ```
 
 Or copy `dist/lamp_pair.fap` to `SD Card/apps/Bluetooth/` via **qFlipper** / **Flipper Lab**.
+
+Edit `/ext/apps_data/lamp_pair/remotes.txt` on the SD card (auto-created on first launch) to customize room names or add new IDs (`Name,HexID`).
 
 ---
 

@@ -4,9 +4,15 @@
 #include <furi_hal_power.h>
 #include <gui/gui.h>
 #include <input/input.h>
+#include <storage/storage.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+
+#define MAX_LAMPS        8
+#define LAMP_NAME_LEN    20
+#define REMOTES_DIR      "/ext/apps_data/lamp_pair"
+#define REMOTES_FILE     "/ext/apps_data/lamp_pair/remotes.txt"
 
 typedef enum {
     LampEventTypeKey,
@@ -18,19 +24,22 @@ typedef struct {
 } LampEvent;
 
 typedef struct {
-    const char* name;
+    char name[LAMP_NAME_LEN];
     uint32_t id;
 } LampProfile;
 
-static const LampProfile LAMP_PROFILES[] = {
+typedef struct {
+    const char* name;
+    uint32_t id;
+} DefaultLampProfile;
+
+static const DefaultLampProfile DEFAULT_LAMPS[] = {
     {"Lamba 1", 0x03C19B61},
     {"Lamba 2", 0x03C1B78E},
     {"Lamba 3", 0x03C1AEDB},
     {"Lamba 4", 0x03C1BBA4},
 };
-#define LAMP_SINGLE_COUNT (sizeof(LAMP_PROFILES) / sizeof(LAMP_PROFILES[0]))
-#define LAMP_IDX_ALL      LAMP_SINGLE_COUNT
-#define LAMP_TOTAL_COUNT  (LAMP_SINGLE_COUNT + 1)
+#define DEFAULT_LAMP_COUNT (sizeof(DEFAULT_LAMPS) / sizeof(DEFAULT_LAMPS[0]))
 
 typedef enum {
     ModeNight = 0,
@@ -148,6 +157,8 @@ static uint16_t crc16_hqx(const uint8_t* data, size_t len, uint16_t init) {
 }
 
 typedef struct {
+    LampProfile lamps[MAX_LAMPS];
+    uint8_t lamp_count;
     uint8_t lamp_idx;
     uint8_t mode_idx;
     bool is_on;
@@ -157,6 +168,83 @@ typedef struct {
     bool pair_flash;
     const char* status_text;
 } LampState;
+
+static void load_default_lamps(LampState* st) {
+    st->lamp_count = DEFAULT_LAMP_COUNT;
+    for(uint8_t i = 0; i < DEFAULT_LAMP_COUNT; i++) {
+        snprintf(st->lamps[i].name, LAMP_NAME_LEN, "%s", DEFAULT_LAMPS[i].name);
+        st->lamps[i].id = DEFAULT_LAMPS[i].id;
+    }
+}
+
+static void load_remotes_from_sd(LampState* st) {
+    Storage* storage = furi_record_open(RECORD_STORAGE);
+    storage_simply_mkdir(storage, REMOTES_DIR);
+
+    File* file = storage_file_alloc(storage);
+    if(!storage_file_exists(storage, REMOTES_FILE)) {
+        if(storage_file_open(file, REMOTES_FILE, FSAM_WRITE, FSOM_CREATE_ALWAYS)) {
+            const char* header = "# Format: Name,HexID (max 8 remotes)\n";
+            storage_file_write(file, header, strlen(header));
+            char line[64];
+            for(uint8_t i = 0; i < DEFAULT_LAMP_COUNT; i++) {
+                int len = snprintf(
+                    line,
+                    sizeof(line),
+                    "%s,%08lX\n",
+                    DEFAULT_LAMPS[i].name,
+                    (unsigned long)DEFAULT_LAMPS[i].id);
+                if(len > 0) storage_file_write(file, line, (uint16_t)len);
+            }
+            storage_file_close(file);
+        }
+        storage_file_free(file);
+        furi_record_close(RECORD_STORAGE);
+        load_default_lamps(st);
+        return;
+    }
+
+    st->lamp_count = 0;
+    if(storage_file_open(file, REMOTES_FILE, FSAM_READ, FSOM_OPEN_EXISTING)) {
+        char buf[512];
+        uint16_t bytes_read = storage_file_read(file, buf, sizeof(buf) - 1);
+        buf[bytes_read] = '\0';
+        storage_file_close(file);
+
+        char* line = buf;
+        while(line != NULL && *line != '\0' && st->lamp_count < MAX_LAMPS) {
+            char* next = strchr(line, '\n');
+            if(next != NULL) {
+                *next = '\0';
+                next++;
+            }
+            size_t len = strlen(line);
+            if(len > 0 && line[len - 1] == '\r') line[len - 1] = '\0';
+            while(*line == ' ' || *line == '\t') line++;
+            if(*line != '\0' && *line != '#') {
+                char* comma = strchr(line, ',');
+                if(comma != NULL) {
+                    *comma = '\0';
+                    char* id_str = comma + 1;
+                    while(*id_str == ' ' || *id_str == '\t') id_str++;
+                    uint32_t id = (uint32_t)strtoul(id_str, NULL, 16);
+                    if(id != 0) {
+                        snprintf(st->lamps[st->lamp_count].name, LAMP_NAME_LEN, "%.19s", line);
+                        st->lamps[st->lamp_count].id = id;
+                        st->lamp_count++;
+                    }
+                }
+            }
+            line = next;
+        }
+    }
+    storage_file_free(file);
+    furi_record_close(RECORD_STORAGE);
+
+    if(st->lamp_count == 0) {
+        load_default_lamps(st);
+    }
+}
 
 static void build_lampsmart_v3_adv(
     uint32_t rem_id,
@@ -293,12 +381,12 @@ static void send_for_remote(LampState* st, uint32_t rem_id, SendAction action, u
 }
 
 static void execute_send(LampState* st, SendAction action) {
-    if(st->lamp_idx == LAMP_IDX_ALL) {
-        for(uint8_t i = 0; i < LAMP_SINGLE_COUNT; i++) {
-            send_for_remote(st, LAMP_PROFILES[i].id, action, 140);
+    if(st->lamp_idx == st->lamp_count) {
+        for(uint8_t i = 0; i < st->lamp_count; i++) {
+            send_for_remote(st, st->lamps[i].id, action, 140);
         }
     } else {
-        send_for_remote(st, LAMP_PROFILES[st->lamp_idx].id, action, 200);
+        send_for_remote(st, st->lamps[st->lamp_idx].id, action, 200);
     }
 }
 
@@ -364,22 +452,33 @@ static void draw_callback(Canvas* canvas, void* ctx) {
     canvas_set_font(canvas, FontSecondary);
 
     /* --- 1. Top Header Bar --- */
+    char hdr[24];
     if(st->status_text) {
         canvas_draw_str(canvas, 3, 9, st->status_text);
-    } else if(st->lamp_idx == LAMP_IDX_ALL) {
-        canvas_draw_str(canvas, 3, 9, "HEPSI (4)");
+    } else if(st->lamp_idx == st->lamp_count) {
+        snprintf(hdr, sizeof(hdr), "HEPSI (%u)", st->lamp_count);
+        canvas_draw_str(canvas, 3, 9, hdr);
     } else {
-        canvas_draw_str(canvas, 3, 9, LAMP_PROFILES[st->lamp_idx].name);
+        canvas_draw_str(canvas, 3, 9, st->lamps[st->lamp_idx].name);
     }
 
-    /* 4 Lamp Indicator Dots */
-    for(uint8_t i = 0; i < LAMP_SINGLE_COUNT; i++) {
-        uint8_t dx = (uint8_t)(76 + i * 8);
-        if(st->lamp_idx == LAMP_IDX_ALL || st->lamp_idx == i) {
-            canvas_draw_disc(canvas, dx, 5, 2);
-        } else {
-            canvas_draw_circle(canvas, dx, 5, 2);
+    /* Lamp Indicator Dots (up to 4 visible dots or compact index) */
+    if(st->lamp_count <= 4) {
+        for(uint8_t i = 0; i < st->lamp_count; i++) {
+            uint8_t dx = (uint8_t)(76 + i * 8);
+            if(st->lamp_idx == st->lamp_count || st->lamp_idx == i) {
+                canvas_draw_disc(canvas, dx, 5, 2);
+            } else {
+                canvas_draw_circle(canvas, dx, 5, 2);
+            }
         }
+    } else {
+        if(st->lamp_idx == st->lamp_count) {
+            snprintf(hdr, sizeof(hdr), "ALL");
+        } else {
+            snprintf(hdr, sizeof(hdr), "%u/%u", st->lamp_idx + 1, st->lamp_count);
+        }
+        canvas_draw_str_aligned(canvas, 104, 9, AlignRight, AlignBottom, hdr);
     }
 
     /* Battery Icon */
@@ -448,6 +547,7 @@ int32_t lamp_pair_app(void* p) {
 
     LampState* st = malloc(sizeof(LampState));
     memset(st, 0, sizeof(LampState));
+    load_remotes_from_sd(st);
     st->lamp_idx = 0;
     st->mode_idx = ModeRead; /* Default: MODE: 2 OKUMA */
     st->is_on = true;
@@ -513,14 +613,16 @@ int32_t lamp_pair_app(void* p) {
                 continue;
             }
 
-            /* Long Left / Right: Switch Lamp (Lamba 1..4 -> HEPSI) */
+            /* Long Left / Right: Switch Lamp (Lamba 1..N -> HEPSI) */
             if(ev.input.key == InputKeyLeft && ev.input.type == InputTypeLong) {
-                st->lamp_idx = (st->lamp_idx == 0) ? (uint8_t)(LAMP_TOTAL_COUNT - 1) : (uint8_t)(st->lamp_idx - 1);
+                uint8_t total = (uint8_t)(st->lamp_count + 1);
+                st->lamp_idx = (st->lamp_idx == 0) ? (uint8_t)(total - 1) : (uint8_t)(st->lamp_idx - 1);
                 view_port_update(vp);
                 continue;
             }
             if(ev.input.key == InputKeyRight && ev.input.type == InputTypeLong) {
-                st->lamp_idx = (uint8_t)((st->lamp_idx + 1) % LAMP_TOTAL_COUNT);
+                uint8_t total = (uint8_t)(st->lamp_count + 1);
+                st->lamp_idx = (uint8_t)((st->lamp_idx + 1) % total);
                 view_port_update(vp);
                 continue;
             }
